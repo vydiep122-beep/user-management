@@ -1,41 +1,75 @@
-
 @Override
-public User getUserById(int id) throws SQLException {
-    String sql = "{CALL get_user_by_id(?)}";
+public void addUserTransaction(User user, int[] permissionIds)
+        throws SQLException {
 
-    try (Connection connection = getConnection();
-         CallableStatement callableStatement =
-                 connection.prepareCall(sql)) {
+    String sqlUser =
+            "INSERT INTO users (name, email, country) VALUES (?, ?, ?)";
 
-        callableStatement.setInt(1, id);
+    String sqlPermission =
+            "INSERT INTO user_permission (user_id, permission_id) VALUES (?, ?)";
 
-        try (ResultSet rs = callableStatement.executeQuery()) {
-            if (rs.next()) {
-                return new User(
-                        id,
-                        rs.getString("name"),
-                        rs.getString("email"),
-                        rs.getString("country")
-                );
+    try (Connection connection = getConnection()) {
+
+        boolean oldAutoCommit = connection.getAutoCommit();
+
+        try {
+            // Bắt đầu transaction
+            connection.setAutoCommit(false);
+
+            int userId;
+
+            // Bước 1: Thêm User
+            try (PreparedStatement pstmt = connection.prepareStatement(
+                    sqlUser, Statement.RETURN_GENERATED_KEYS)) {
+
+                pstmt.setString(1, user.getName());
+                pstmt.setString(2, user.getEmail());
+                pstmt.setString(3, user.getCountry());
+
+                pstmt.executeUpdate();
+
+                // Lấy ID User vừa tạo
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (!rs.next()) {
+                        throw new SQLException("Không lấy được ID User.");
+                    }
+
+                    userId = rs.getInt(1);
+                }
             }
+
+            // Bước 2: Gán quyền cho User
+            if (permissionIds != null && permissionIds.length > 0) {
+
+                try (PreparedStatement pstmt =
+                        connection.prepareStatement(sqlPermission)) {
+
+                    for (int permissionId : permissionIds) {
+                        pstmt.setInt(1, userId);
+                        pstmt.setInt(2, permissionId);
+                        pstmt.executeUpdate();
+                    }
+                }
+            }
+
+            // Bước 3: Tất cả thành công thì commit
+            connection.commit();
+
+        } catch (SQLException e) {
+
+            // Có lỗi thì rollback
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackError) {
+                e.addSuppressed(rollbackError);
+            }
+
+            // Báo lỗi cho Servlet xử lý
+            throw e;
+
+        } finally {
+            // Khôi phục auto-commit
+            connection.setAutoCommit(oldAutoCommit);
         }
-    }
-
-    return null;
-}
-
-@Override
-public void insertUserStore(User user) throws SQLException {
-    String sql = "{CALL insert_user(?, ?, ?)}";
-
-    try (Connection connection = getConnection();
-         CallableStatement callableStatement =
-                 connection.prepareCall(sql)) {
-
-        callableStatement.setString(1, user.getName());
-        callableStatement.setString(2, user.getEmail());
-        callableStatement.setString(3, user.getCountry());
-
-        callableStatement.executeUpdate();
     }
 }
