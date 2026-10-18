@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UserDAO implements IUserDAO {
+
     private static final String JDBC_URL =
             "jdbc:mysql://localhost:3306/demo?useSSL=false&serverTimezone=UTC";
     private static final String JDBC_USER = "root";
@@ -18,10 +19,59 @@ public class UserDAO implements IUserDAO {
                 JDBC_URL, JDBC_USER, JDBC_PASSWORD);
     }
 
+    // Lấy danh sách User
     @Override
     public List<User> selectAllUsers() throws SQLException {
         List<User> users = new ArrayList<>();
         String sql = "SELECT id, name, email, country FROM users";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                users.add(new User(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("email"),
+                        rs.getString("country")
+                ));
+            }
+        }
+        return users;
+    }
+
+    // Tìm kiếm theo country
+    public List<User> searchUsersByCountry(String country)
+            throws SQLException {
+        List<User> users = new ArrayList<>();
+        String sql = "SELECT id, name, email, country FROM users "
+                   + "WHERE country LIKE ? ORDER BY name ASC";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, "%" + country + "%");
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    users.add(new User(
+                            rs.getInt("id"),
+                            rs.getString("name"),
+                            rs.getString("email"),
+                            rs.getString("country")
+                    ));
+                }
+            }
+        }
+        return users;
+    }
+
+    // Sắp xếp theo name từ A đến Z
+    public List<User> sortUsersByName() throws SQLException {
+        List<User> users = new ArrayList<>();
+        String sql = "SELECT id, name, email, country "
+                   + "FROM users ORDER BY name ASC";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -76,7 +126,7 @@ public class UserDAO implements IUserDAO {
 
     @Override
     public boolean updateUser(User user) throws SQLException {
-        String sql = "UPDATE users SET name = ?, email = ?, country = ? WHERE id = ?";
+        String sql = "UPDATE users SET name=?, email=?, country=? WHERE id=?";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -90,7 +140,7 @@ public class UserDAO implements IUserDAO {
 
     @Override
     public boolean deleteUser(int id) throws SQLException {
-        String sql = "DELETE FROM users WHERE id = ?";
+        String sql = "DELETE FROM users WHERE id=?";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
